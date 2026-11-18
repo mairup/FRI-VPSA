@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"math/rand"
+	"sync"
+	"time"
 )
 
 type narocilo interface {
@@ -74,91 +76,151 @@ func gen_tecaj() spletniTecaj {
 	return spletniTecaj
 }
 
-func (izdelek *izdelek) obdelaj() error {
+func (izdelek *izdelek) obdelaj(id int, napake chan error) error {
+	defer wg.Done()
 	if len(izdelek.imeIzdelka) == 0 {
-		return fmt.Errorf("izdelek nima imena")
+		napake <- fmt.Errorf("izdelek nima imena [%s, %.2f, %.2f]", izdelek.imeIzdelka, izdelek.cena, izdelek.teza)
+		return nil
 	}
 	if izdelek.cena <= 0 {
-		return fmt.Errorf("izdelek nima veljavne cene")
+		napake <- fmt.Errorf("izdelek nima veljavne cene [%s, %.2f, %.2f]", izdelek.imeIzdelka, izdelek.cena, izdelek.teza)
+		return nil
 	}
 	if izdelek.teza <= 0 {
-		return fmt.Errorf("izdelek nima veljavne teže")
+		napake <- fmt.Errorf("izdelek nima veljavne teže [%s, %.2f, %.2f]", izdelek.imeIzdelka, izdelek.cena, izdelek.teza)
+		return nil
 	}
 
-	fmt.Printf("Veljaven izdelek: ")
-	izdelek.izpisi()
+	rlock.Lock()
+	promet += izdelek.cena
+	st_narocil++
+	fmt.Printf("Veljaven izdelek: Cena: %6.2f €, Teža: %5.2f kg | Ime: %s\n", izdelek.cena, izdelek.teza, izdelek.imeIzdelka)
+	fmt.Printf("[%d]Narocilo [%d]: Cena: %.2f\n", id, st_narocil, izdelek.cena)
+	rlock.Unlock()
 	return nil
 }
 
-func (eknjiga *eknjiga) obdelaj() error {
+func (eknjiga *eknjiga) obdelaj(id int, napake chan error) error {
+	defer wg.Done()
 	if len(eknjiga.naslovKnjige) == 0 {
-		return fmt.Errorf("eknjiga nima imena")
+		napake <- fmt.Errorf("eknjiga nima imena [%s, %.2f]", eknjiga.naslovKnjige, eknjiga.cena)
+		return nil
 	}
 	if eknjiga.cena <= 0 {
-		return fmt.Errorf("eknjiga nima veljavne cene")
+		napake <- fmt.Errorf("eknjiga nima veljavne cene [%s, %.2f]", eknjiga.naslovKnjige, eknjiga.cena)
+		return nil
 	}
+
+	rlock.Lock()
+	promet += eknjiga.cena
+	st_narocil++
+	fmt.Printf("Veljavna eknjiga: Cena: %6.2f € | Ime: %s\n", eknjiga.cena, eknjiga.naslovKnjige)
+	fmt.Printf("[%d]Narocilo [%d]: Cena: %.2f\n", id, st_narocil, eknjiga.cena)
+	rlock.Unlock()
 	return nil
 }
 
-func (spletniTecaj *spletniTecaj) obdelaj() error {
+func (spletniTecaj *spletniTecaj) obdelaj(id int, napake chan error) error {
+	defer wg.Done()
+
 	if len(spletniTecaj.imeTecaja) == 0 {
-		return fmt.Errorf("spletni tečaj nima imena")
+		napake <- fmt.Errorf("spletni tecaj nima imena [%s, %.2f, %v]", spletniTecaj.imeTecaja, spletniTecaj.cenaUre, spletniTecaj.trajanjeUre)
+		return nil
 	}
 	if spletniTecaj.cenaUre <= 0 {
-		return fmt.Errorf("spletni tečaj nima veljavne cene")
+		napake <- fmt.Errorf("spletni tecaj nima veljavne cene [%s, %.2f, %v]", spletniTecaj.imeTecaja, spletniTecaj.cenaUre, spletniTecaj.trajanjeUre)
+		return nil
 	}
 	if spletniTecaj.trajanjeUre <= 0 {
-		return fmt.Errorf("spletni tečaj nima veljavnega trajanja")
+		napake <- fmt.Errorf("spletni tecaj nima veljavnega trajanja [%s, %.2f, %v]", spletniTecaj.imeTecaja, spletniTecaj.cenaUre, spletniTecaj.trajanjeUre)
+		return nil
 	}
 
+	rlock.Lock()
+	promet += spletniTecaj.cenaUre * float64(spletniTecaj.trajanjeUre)
+	st_narocil++
+	fmt.Printf("Veljaven spletni tečaj: Cena: %6.2f €, Trajanje: %v ur | Ime: %s\n", spletniTecaj.cenaUre * float64(spletniTecaj.trajanjeUre), spletniTecaj.trajanjeUre, spletniTecaj.imeTecaja)
+	fmt.Printf("[%d]Narocilo [%d]: Cena: %.2f\n", id, st_narocil, spletniTecaj.cenaUre * float64(spletniTecaj.trajanjeUre))
+	rlock.Unlock()
 	return nil
 }
 
-func kupec()  {
+
+func kupec(id int, napake chan error)  {
+	defer wg.Done()
 	randn := int(rand.Intn(9))
 	randn2 := 0
 
 	for randn != 0 {
+		fmt.Printf("[%d]Brskam...\n", id)
+		time.Sleep(time.Millisecond * time.Duration(100 * rand.Intn(5)))
+
 		randn2 = int(rand.Intn(2))
 		if (randn2 == 0) {
-			gen_izdelek()
+			time.Sleep(time.Millisecond * time.Duration(100 * rand.Intn(3)))
+			izdelek := gen_izdelek()
+			wg.Add(1)
+			go izdelek.obdelaj(id, napake)
 		}
 		randn2 = int(rand.Intn(2))
 		if (randn2 == 0) {
-			gen_eknjigo()
+			time.Sleep(time.Millisecond * time.Duration(100 * rand.Intn(5)))
+			eknjiga := gen_eknjigo()
+			wg.Add(1)
+			go eknjiga.obdelaj(id, napake)
 		}
 		randn2 = int(rand.Intn(2))
 		if (randn2 == 0) {
-			gen_tecaj()
+			time.Sleep(time.Millisecond * time.Duration(100 * rand.Intn(5)))
+			tecaj := gen_tecaj()
+			wg.Add(1)
+			go tecaj.obdelaj(id, napake)
 		}
 
-		randn := int(rand.Intn(9))
+
+		randn = int(rand.Intn(9))
 	}
 }
 
-func kupi(){
-
+func catch_errors(napake chan error, error_messages *[]error) {
+	defer wg.Done()
+	for err := range napake {
+		rlock.Lock()
+		*error_messages = append(*error_messages, err)
+		rlock.Unlock()
+	}
 }
 
+func print_error_messages(error_messages []error) {
+	for _, err := range error_messages {
+		fmt.Println(err)
+	}
+}
+
+var rlock sync.RWMutex
+var promet float64
+var st_narocil int
+var wg sync.WaitGroup
+
 func main() {
+	napake := make(chan error, 10)
+	promet = 0
+	st_narocil = 0
+	var error_messages []error
 
+	for i := range 10 {
+		wg.Add(1)
+		go kupec(i, napake)
+	}
 
-
-	// for range 7 {
-	// 	izdelek := gen_izdelek()
-	// 	izdelek.izpisi()
-	// }
-
-	// for range 7 {
-	// 	eknjiga := gen_eknjigo()
-	// 	eknjiga.izpisi()
-	// }
-
-	// for range 7 {
-	// 	tecaj := gen_tecaj()
-	// 	tecaj.izpisi()
-	// }
-
+	go catch_errors(napake, &error_messages)
+	wg.Wait()
+	wg.Add(1)
+	close(napake)
+	fmt.Printf("\nKupci so odšli. Statistika: stevilo narocil: %d, promet: %.2f\n\n", st_narocil, promet)
+	fmt.Println("Izpisujem napake:")
+	wg.Wait()
+	print_error_messages(error_messages)
 }
 
 
