@@ -37,3 +37,6 @@ go.work.sum
 
 # macOS metadata
 .DS_Store
+
+# agent skill definitions (built-in system skills, vendored locally)
+skills/
