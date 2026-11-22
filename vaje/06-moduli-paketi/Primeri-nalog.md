@@ -15,6 +15,7 @@ var ch chan struct{} = make(chan struct{})
 
 func worker(id int) {
 	fmt.Println(id)
+	// ch <- true
 }
 
 func main() {
